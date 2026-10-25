@@ -1,0 +1,8 @@
+parameters:
+    level: max
+    paths:
+        - src
+    # PHP 8 semantics (GdImage, CurlHandle). PHP 7.4 compatibility is proven by running the test suite on 7.4.
+    phpVersion:
+        min: 80000
+        max: 80599

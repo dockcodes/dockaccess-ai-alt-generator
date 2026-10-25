@@ -1,0 +1,47 @@
+{
+    "name": "dockcodes/dockaccess-alt-generator",
+    "type": "library",
+    "description": "Framework-agnostic PHP client for the dockaccess.org AI alt text generator, with strict image validation before anything leaves the server.",
+    "keywords": ["accessibility", "alt text", "wcag", "dockaccess", "image", "ai"],
+    "homepage": "https://dockaccess.org",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Dock",
+            "homepage": "https://dock.eu"
+        }
+    ],
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "phpstan/phpstan": "^2.1"
+    },
+    "suggest": {
+        "ext-gd": "Re-encodes every image before upload (pixels only: no metadata, no appended data) and scales it down.",
+        "ext-mbstring": "Faster UTF-8 handling of alt texts; a PCRE fallback is used without it."
+    },
+    "autoload": {
+        "psr-4": {
+            "Dock\\AltGenerator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Dock\\AltGenerator\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.4.33"
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=512M"
+    }
+}

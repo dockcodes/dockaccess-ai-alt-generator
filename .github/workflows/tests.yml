@@ -1,0 +1,94 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  # The network tests depend on badssl.com and the production API, so they run weekly and on
+  # demand (Actions → Tests → Run workflow) instead of failing a push when either is down.
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+    steps:
+      # Actions are pinned to commits: a moved tag cannot change what runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, gd, json, mbstring, phar
+          ini-values: error_reporting=-1, memory_limit=512M
+          coverage: none
+          tools: composer:v2
+
+      # What the image tests can cover depends on the formats this GD build reads and writes.
+      - name: GD build
+        run: |
+          php -r 'var_export(gd_info()); echo PHP_EOL;'
+
+      - run: composer validate --strict
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      # --verbose lists every skipped test with its reason.
+      - run: vendor/bin/phpunit --verbose
+
+  analyse:
+    name: PHPStan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: curl, gd, json, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: composer analyse -- --no-progress
+
+  network:
+    name: Network (certificates, real API)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: curl, gd, json, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      # A made-up key: the API refuses it before reading the image, nothing is stored.
+      - run: vendor/bin/phpunit --verbose --filter NetworkTest
+        env:
+          DOCKACCESS_ALT_NETWORK_TESTS: '1'
