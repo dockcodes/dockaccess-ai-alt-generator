@@ -131,8 +131,8 @@ Name the narrowest directory that holds images, never the document root:
 | Joomla | `JPATH_ROOT . '/images'` |
 | Drupal | `\Drupal::service('file_system')->realpath('public://')` - pass real paths, not `public://` URIs |
 | Magento | `$directoryList->getPath(DirectoryList::MEDIA)` |
-| Laravel | `Storage::disk('public')->path('')` |
-| Symfony | `%kernel.project_dir%/public/uploads` |
+| Laravel | `Storage::disk('public')->path('')` - or use [dockaccess-alt-generator-laravel](https://github.com/dockcodes/dockaccess-ai-alt-generator-laravel) |
+| Symfony | `%kernel.project_dir%/public/uploads` - or use [dockaccess-alt-generator-symfony](https://github.com/dockcodes/dockaccess-ai-alt-generator-symfony) |
 
 The file name is only a hint: it is reduced to `[A-Za-z0-9_-]`, given the extension of the format
 actually sent, and never used to decide what the file is.
@@ -163,7 +163,12 @@ $result->setUuid();      // the set it was added to
 $result->image();        // what was actually sent: ->bytes(), ->format(), ->width(), ->height(), ->method(), ->sha256()
 
 $usage = $generator->usage();    // ->used(), ->limit(), ->remaining(), ->isExhausted()
+$usage->period();                // Usage::DAY (free plan) or Usage::MONTH (paid plans)
+$usage->resetsAt();              // when the window starts over, DateTimeImmutable in UTC (null from an older API)
 ```
+
+The free plan counts generations per UTC day, paid plans per UTC calendar month - a paid plan can
+use its whole month in one day.
 
 `$generator->prepare($image)` verifies and sanitizes without sending anything - useful to refuse
 a bad file at upload time or before queueing a bulk run.
@@ -177,6 +182,49 @@ use Dock\AltGenerator\Text\PlainText;
 $alt = PlainText::clean($pushedAlt, 2000);   // one line: no markup, controls, direction overrides or zero-width characters
 ```
 
+## Connecting a site
+
+A site is connected to a dockaccess.org account once; the connection hands over the account key
+and appears in the account (the *ALT generator* tab of the site) with the system and the time the
+site last checked in. The owner can disconnect it there. This is the handshake the WordPress,
+PrestaShop, Joomla, Laravel and Symfony integrations use:
+
+```php
+use Dock\AltGenerator\Connection\ConnectionClient;
+use Dock\AltGenerator\Connection\ConnectRequest;
+
+$client     = new ConnectionClient(Config::anonymous());
+$connection = $client->connect(
+    ConnectRequest::create($siteToken, $email, $password, 'laravel', 'https://shop.example.com')
+        ->withVersions($frameworkVersion, $integrationVersion)
+);
+
+// Store as secrets: the site token, the account key and the connection secret.
+$connection->siteToken();
+$connection->accountKey();   // Secret - Config::create($connection->accountKey()->reveal())
+$connection->secret();       // Secret - for verify()
+```
+
+The site token is in the account, next to the site. The address has to be one of the site's
+domains (or a local address, for development). The password is sent once, in an HTTPS request
+that is never redirected or repeated, and is not kept.
+
+Before generating, or every few minutes, ask whether the site may still generate:
+
+```php
+$verification = $client->verify($siteToken, new Secret($storedSecret));
+
+$verification->isActive();   // false: Verification::PAUSED by the plan, or DISABLED in the account
+```
+
+`verify()` throws `ConnectionException` with `isConnectionGone()` when the owner disconnected the
+site - forget the stored values and connect again. `disconnect()` removes the connection, and
+`updateAlts()` sends an alt edited on the site back to the account.
+
+`ConnectionException::getReason()` names a refusal: `invalid_credentials`, `email_not_verified`,
+`token_not_owned`, `domain_not_allowed`, `alt_disabled`, `alt_paused`, `already_connected` (repeat
+with `withOverwrite()`), `disconnected`, `not_connected`, `too_many_attempts`, `invalid_request`.
+
 ## Errors
 
 Every exception implements `Dock\AltGenerator\Exception\AltGeneratorException`. None of them
@@ -187,12 +235,13 @@ carries the account key, the request URL's query or the image bytes.
 | `InvalidImageException` | Refused locally, nothing was sent. `getReason()`: `not_allowed`, `empty`, `too_large`, `unsupported_format`, `malformed`, `bad_dimensions`, `embedded_code`, `cannot_sanitize` | Show the reason; do not retry |
 | `ConfigurationException` | Invalid configuration (bad URL, no allowed directory, invalid option) | Fix the integration |
 | `AuthenticationException` | The key is unknown or disabled (403) | Ask the site owner to check the key |
-| `DailyLimitReachedException` | The plan's daily limit is used up; `getDailyLimit()` | Stop until tomorrow, offer an upgrade |
+| `DailyLimitReachedException` | The plan's limit is used up: the day's on the free plan, the month's on paid plans; `getDailyLimit()`, `getPeriod()` | Stop until the window renews, offer an upgrade |
 | `RateLimitedException` | Too many requests per minute; `getRetryAfter()` in seconds | Retry after that delay |
 | `ImageRejectedException` | The API refused the image (400, 413, 415) | Do not retry this image |
 | `ServerException` | The API failed (5xx) | Retry later with backoff |
 | `TransportException` | No complete answer (DNS, TLS, timeout, oversized answer); `isRetryable()` is true only when nothing reached the API | Retry later |
 | `UnexpectedResponseException` | An answer the client does not understand (redirect, invalid JSON) | Log and report |
+| `ConnectionException` | dockaccess.org refused to connect, verify or disconnect the site; `getReason()` | See *Connecting a site* |
 
 `ApiException::getApiMessage()` returns the API's own message, cleaned to plain text.
 

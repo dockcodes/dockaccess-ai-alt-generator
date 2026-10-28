@@ -33,7 +33,7 @@ use Dock\AltGenerator\Text\PlainText;
  */
 final class AltGenerator
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     private const UUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/Di';
 

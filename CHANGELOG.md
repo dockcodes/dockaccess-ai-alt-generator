@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 - unreleased
+
+- `Connection\ConnectionClient`: the dockaccess.org handshake (`integrations/connect`, `verify`,
+  `disconnect`) and `alts/update`, with `ConnectRequest`, `Connection`, `Verification` and
+  `ConnectionException`. Nothing is repeated after it may have reached the server; the password is
+  never kept or shown in dumps.
+- `Config::anonymous()` for connecting before there is an account key, `withConnectionUrl()`.
+- `Usage::period()` (`day` on the free plan, `month` on paid plans) and `resetsAt()`;
+  `DailyLimitReachedException::getPeriod()` from `X-Alt-Limit-Period`.
+
 ## 1.0.0 - unreleased
 
 First version of the PHP core for the dockaccess.org alt generator.
