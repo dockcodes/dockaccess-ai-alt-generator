@@ -77,11 +77,11 @@ final class AltGenerator
     }
 
     /**
-     * Generates alt text for one image. Counts against the account's daily limit when it succeeds.
+     * Generates alt text for one image. Counts against the account's limit when it succeeds.
      *
      * @throws Exception\InvalidImageException       the file was refused locally, nothing was sent
      * @throws Exception\AuthenticationException     the account key was not accepted
-     * @throws Exception\DailyLimitReachedException  the daily quota is spent
+     * @throws Exception\DailyLimitReachedException  the quota of the day (free plan) or month is spent
      * @throws Exception\RateLimitedException        the per minute cap; try again after getRetryAfter()
      * @throws Exception\ImageRejectedException      the API refused the image
      * @throws Exception\ApiException                any other refusal
@@ -105,7 +105,7 @@ final class AltGenerator
     }
 
     /**
-     * Today's usage of the account against its daily limit.
+     * The account's usage in the current window: the day on the free plan, the month on paid plans.
      */
     public function usage(): Usage
     {
@@ -117,7 +117,30 @@ final class AltGenerator
             throw new UnexpectedResponseException('The usage answer lacks its numbers.', $response->status());
         }
 
-        return new Usage($requests['used'], $requests['limit']);
+        return new Usage(
+            $requests['used'],
+            $requests['limit'],
+            ($requests['period'] ?? null) === Usage::MONTH ? Usage::MONTH : Usage::DAY,
+            self::moment($requests['resets_at'] ?? null)
+        );
+    }
+
+    /**
+     * An ISO 8601 moment from the API, in UTC; null for anything else.
+     *
+     * @param mixed $value
+     */
+    private static function moment($value): ?\DateTimeImmutable
+    {
+        if (!is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/D', $value) !== 1) {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($value, new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('UTC'));
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /**

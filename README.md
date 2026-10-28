@@ -30,10 +30,31 @@ The threat model and what each layer guarantees are in [SECURITY.md](SECURITY.md
 composer require dockcodes/dockaccess-alt-generator
 ```
 
-Plugins that ship their own `vendor/` directory (WordPress, PrestaShop, Joomla, Magento modules
-installed from a zip) should prefix the namespace with [Strauss](https://github.com/BrianHenryIE/strauss)
-or [PHP-Scoper](https://github.com/humbug/php-scoper), so that two plugins bundling different
-versions of this package cannot collide.
+Plugins that ship their own code (WordPress, PrestaShop, Joomla and Magento modules installed
+from a zip) bundle the library under a namespace of their own, so two plugins carrying different
+versions cannot load each other's classes:
+
+```bash
+php bin/bundle.php ../my-plugin/vendor/dockcodes/dockaccess-alt-generator 'MyPlugin\Vendor' --guard=ABSPATH
+```
+
+```php
+require __DIR__ . '/vendor/dockcodes/dockaccess-alt-generator/autoload.php';
+
+use MyPlugin\Vendor\Dock\AltGenerator\AltGenerator;
+```
+
+The target receives `src/` with every `Dock\AltGenerator` reference prefixed, an `autoload.php`,
+the `LICENSE` and a `bundle.json` with the version and the SHA-256 of every file. Every PHP file
+opens with a header naming the package, its version and the MIT License, the license notice the
+Joomla Extensions Directory checks each file for. `--guard` adds `defined('CONSTANT') || exit;` to
+every file for platforms that require it (`ABSPATH`, `_JEXEC`, `_PS_VERSION_`), and `--index` puts
+the redirecting `index.php` PrestaShop modules need into every directory:
+
+```bash
+php bin/bundle.php ../my-module/vendor/dockcodes/dockaccess-alt-generator 'MyModule\Vendor' --guard=_PS_VERSION_ --index
+``` The bundle is built next to the target and only replaces it once every file
+parses, and a directory the script did not write is never overwritten.
 
 ## Quick start
 
@@ -146,6 +167,15 @@ $usage = $generator->usage();    // ->used(), ->limit(), ->remaining(), ->isExha
 
 `$generator->prepare($image)` verifies and sanitizes without sending anything - useful to refuse
 a bad file at upload time or before queueing a bulk run.
+
+Alts that reach the site another way, such as those dockaccess.org pushes to a connected site,
+go through the same cleaning as generated ones:
+
+```php
+use Dock\AltGenerator\Text\PlainText;
+
+$alt = PlainText::clean($pushedAlt, 2000);   // one line: no markup, controls, direction overrides or zero-width characters
+```
 
 ## Errors
 

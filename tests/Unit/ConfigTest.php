@@ -46,6 +46,27 @@ final class ConfigTest extends TestCase
         yield 'relative' => ['alt.dockaccess.org'];
     }
 
+    /**
+     * @dataProvider unsafeUrls
+     */
+    public function testRefusesUnsafeConnectionUrls(string $url): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        Config::anonymous()->withConnectionUrl($url);
+    }
+
+    public function testAnAnonymousConfigHasNoKey(): void
+    {
+        $config = Config::anonymous();
+
+        self::assertFalse($config->hasAccountKey());
+        self::assertSame('https://dockaccess.org/fast-api', $config->connectionUrl());
+
+        $this->expectException(ConfigurationException::class);
+        $config->accountKey();
+    }
+
     public function testHttpOnlyForLoopbackAfterOptIn(): void
     {
         $config = Config::create(self::KEY)->allowInsecureLoopback();

@@ -98,7 +98,7 @@ final class CurlTransport implements TransportInterface
             },
         ];
 
-        $this->restrictProtocols($options);
+        $this->restrictProtocols($options, $request);
 
         if ($request->body() !== null) {
             $options[CURLOPT_POSTFIELDS] = $request->body();
@@ -159,11 +159,14 @@ final class CurlTransport implements TransportInterface
     }
 
     /**
+     * Requests are built only from the validated base and connection URLs, so plain HTTP here means
+     * a loopback stub that allowInsecureLoopback() let through.
+     *
      * @param array<int, mixed> $options
      */
-    private function restrictProtocols(array &$options): void
+    private function restrictProtocols(array &$options, Request $request): void
     {
-        $insecure = $this->config->isInsecureLoopbackAllowed() && strncmp($this->config->baseUrl(), 'http://', 7) === 0;
+        $insecure = $this->config->isInsecureLoopbackAllowed() && strncmp($request->url(), 'http://', 7) === 0;
 
         if (defined('CURLOPT_PROTOCOLS_STR')) {
             $options[(int) constant('CURLOPT_PROTOCOLS_STR')]       = $insecure ? 'http,https' : 'https';

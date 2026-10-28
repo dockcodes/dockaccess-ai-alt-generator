@@ -18,11 +18,17 @@ final class Config
 {
     public const DEFAULT_BASE_URL = 'https://alt.dockaccess.org';
 
-    /** @var Secret */
+    /** The dockaccess.org integration API (connect, verify, disconnect, alt updates). */
+    public const DEFAULT_CONNECTION_URL = 'https://dockaccess.org/fast-api';
+
+    /** @var Secret|null */
     private $accountKey;
 
     /** @var string */
     private $baseUrl = self::DEFAULT_BASE_URL;
+
+    /** @var string */
+    private $connectionUrl = self::DEFAULT_CONNECTION_URL;
 
     /** @var bool */
     private $insecureLoopback = false;
@@ -55,7 +61,7 @@ final class Config
     /** @var ImagePolicy */
     private $imagePolicy;
 
-    public function __construct(Secret $accountKey)
+    public function __construct(?Secret $accountKey)
     {
         $this->accountKey  = $accountKey;
         $this->imagePolicy = ImagePolicy::secure();
@@ -68,6 +74,15 @@ final class Config
         return new self(new Secret($accountKey));
     }
 
+    /**
+     * Settings without an account key, for ConnectionClient before the site is connected - the
+     * connection is what hands the key over. AltGenerator refuses such a configuration.
+     */
+    public static function anonymous(): self
+    {
+        return new self(null);
+    }
+
     public function withBaseUrl(string $baseUrl): self
     {
         $copy          = clone $this;
@@ -77,7 +92,18 @@ final class Config
     }
 
     /**
-     * Lets withBaseUrl() take http://127.0.0.1, http://[::1] or http://localhost. Tests only.
+     * The dockaccess.org integration API used by ConnectionClient. HTTPS only, as withBaseUrl().
+     */
+    public function withConnectionUrl(string $connectionUrl): self
+    {
+        $copy                = clone $this;
+        $copy->connectionUrl = self::validatedBaseUrl($connectionUrl, $this->insecureLoopback);
+
+        return $copy;
+    }
+
+    /**
+     * Lets withBaseUrl() and withConnectionUrl() take http://127.0.0.1, http://[::1] or http://localhost. Tests only.
      */
     public function allowInsecureLoopback(): self
     {
@@ -186,14 +212,31 @@ final class Config
         return $copy;
     }
 
+    /**
+     * @throws ConfigurationException when the configuration was created with anonymous()
+     */
     public function accountKey(): Secret
     {
+        if ($this->accountKey === null) {
+            throw new ConfigurationException('No account key is configured. Connect the site to dockaccess.org first.');
+        }
+
         return $this->accountKey;
+    }
+
+    public function hasAccountKey(): bool
+    {
+        return $this->accountKey !== null;
     }
 
     public function baseUrl(): string
     {
         return $this->baseUrl;
+    }
+
+    public function connectionUrl(): string
+    {
+        return $this->connectionUrl;
     }
 
     public function isInsecureLoopbackAllowed(): bool
@@ -247,8 +290,9 @@ final class Config
     public function __debugInfo(): array
     {
         return [
-            'accountKey'       => Secret::REDACTED,
+            'accountKey'       => $this->accountKey === null ? null : Secret::REDACTED,
             'baseUrl'          => $this->baseUrl,
+            'connectionUrl'    => $this->connectionUrl,
             'insecureLoopback' => $this->insecureLoopback,
             'connectTimeoutMs' => $this->connectTimeoutMs,
             'timeoutMs'        => $this->timeoutMs,

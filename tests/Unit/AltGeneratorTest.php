@@ -9,6 +9,7 @@ use Dock\AltGenerator\Config;
 use Dock\AltGenerator\Exception\AltGeneratorException;
 use Dock\AltGenerator\Exception\ApiException;
 use Dock\AltGenerator\Exception\AuthenticationException;
+use Dock\AltGenerator\Exception\ConfigurationException;
 use Dock\AltGenerator\Exception\DailyLimitReachedException;
 use Dock\AltGenerator\Exception\ImageRejectedException;
 use Dock\AltGenerator\Exception\InvalidImageException;
@@ -112,6 +113,15 @@ final class AltGeneratorTest extends TestCase
             DailyLimitReachedException::class,
             static function (DailyLimitReachedException $e): void {
                 self::assertSame(50, $e->getDailyLimit());
+                self::assertNull($e->getPeriod());
+            },
+        ];
+        yield 'monthly limit' => [
+            FakeTransport::json(429, ['detail' => "You've reached your monthly limit."], ['X-Alt-Reason' => 'limit_reached', 'X-Alt-Daily-Limit' => '2000', 'X-Alt-Limit-Period' => 'month']),
+            DailyLimitReachedException::class,
+            static function (DailyLimitReachedException $e): void {
+                self::assertSame(2000, $e->getDailyLimit());
+                self::assertSame('month', $e->getPeriod());
             },
         ];
         yield 'per minute cap' => [
@@ -185,6 +195,40 @@ final class AltGeneratorTest extends TestCase
 
         self::assertSame([12, 50, 38], [$usage->used(), $usage->limit(), $usage->remaining()]);
         self::assertSame('https://alt.dockaccess.org/api/user?key=' . self::KEY, $transport->requests[0]->url());
+        // An API from before monthly plans counts the UTC day and does not say when it ends.
+        self::assertSame('day', $usage->period());
+        self::assertNull($usage->resetsAt());
+    }
+
+    public function testReadsAMonthlyUsage(): void
+    {
+        $transport = new FakeTransport(FakeTransport::json(200, ['requests' => [
+            'limit' => 2000, 'used' => 1990, 'period' => 'month', 'resets_at' => '2026-11-01T00:00:00+00:00',
+        ]]));
+        $usage = (new AltGenerator(Config::create(self::KEY), $transport))->usage();
+
+        self::assertTrue($usage->isMonthly());
+        self::assertSame(10, $usage->remaining());
+        self::assertNotNull($usage->resetsAt());
+        self::assertSame('2026-11-01T00:00:00+00:00', $usage->resetsAt()->format(DATE_ATOM));
+    }
+
+    public function testIgnoresAResetMomentItCannotRead(): void
+    {
+        $transport = new FakeTransport(FakeTransport::json(200, ['requests' => [
+            'limit' => 10, 'used' => 1, 'period' => 'week', 'resets_at' => 'tomorrow',
+        ]]));
+        $usage = (new AltGenerator(Config::create(self::KEY), $transport))->usage();
+
+        self::assertSame('day', $usage->period());
+        self::assertNull($usage->resetsAt());
+    }
+
+    public function testAnAnonymousConfigCannotGenerate(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        new AltGenerator(Config::anonymous(), new FakeTransport());
     }
 
     public function testAltsAreCutToTheConfiguredLength(): void

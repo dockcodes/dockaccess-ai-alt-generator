@@ -12,7 +12,8 @@ namespace Dock\AltGenerator\Text;
  * bidirectional overrides that make an alt read differently than it is stored ("Trojan Source"),
  * zero-width characters and invalid UTF-8.
  *
- * @internal
+ * Alts returned by AltGenerator have been through it already. Integrations use it for alts that
+ * arrive another way, such as those dockaccess.org pushes to a connected site.
  */
 final class PlainText
 {

@@ -57,7 +57,12 @@ final class ResponseReader
             if ($response->header('X-Alt-Reason') === 'limit_reached') {
                 $limit = $response->header('X-Alt-Daily-Limit');
 
-                throw new DailyLimitReachedException($status, $message, $limit !== null && ctype_digit($limit) ? (int) $limit : null);
+                throw new DailyLimitReachedException(
+                    $status,
+                    $message,
+                    $limit !== null && ctype_digit($limit) ? (int) $limit : null,
+                    $response->header('X-Alt-Limit-Period')
+                );
             }
 
             throw new RateLimitedException($status, $message, self::retryAfter($response->header('Retry-After')));
